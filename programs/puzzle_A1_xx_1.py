@@ -5,36 +5,37 @@ import sys
 # Heap PQ
 # https://docs.python.org/2/library/heapq.html
 
-#Running script takes in python file.py, init state, output action sequence.
+# Running script: given code can be run with the command:
+# python file.py, ./path/to/init_state.txt ./output/output.txt
 
 from copy import deepcopy
 from heapq import heappush, heappop
 
-
+# Puzzle object implementing A* using manhattan distance as a heuristic.
 class Puzzle(object):
     num_nodes_generated = 0
     max_frontier_size = 1
+    expanded = None
     frontier = None
+    frontier_map = None
+    manhattan_dictionary = None
+
     SIZE = 3
+    MAX_TILES = 9
 
     def __init__(self, init_state, goal_state):
-        # You may add more attributes as necessary
         self.init_state = init_state # Board
         self.goal_state = goal_state
         self.actions = list() # List of possible actions
-        self.solvable = True
 
         # Set these afterwards.
         self.parent = None
         self.pathcost = 0
-        self.expanded_states = None
-        self.solution = None
         self.empty_tile_position = None
-        self.manhattan_dictionary = None
         self.action = None
 
         # Statistics
-        self.num_nodes_generated += 1
+        Puzzle.num_nodes_generated += 1
 
     #Override
     def __eq__(self, other):
@@ -42,12 +43,21 @@ class Puzzle(object):
         # Defined as equal if init_state is the same.
         return isinstance(other, Puzzle) and (self.init_state == other.init_state)
 
+    def to_string(self):
+        string_represntation = ""
+        for i in range(3):
+            for j in range(3):
+                string_represntation += str(self.init_state[i][j])
+
+        return string_represntation
+
     def solve(self):
         # TODO: Write your code here
         # frontier = list()
 
         # return: a list of actions like: ["UP", "DOWN"]
         return self.astar_search()
+
 
     # You may add more (helper) methods if necessary.
     # Note that our evaluation scripts only call the solve method.
@@ -57,54 +67,82 @@ class Puzzle(object):
         # Return soln, unsolvable, or failure..etc.
         # Initialize
         self.initialize_astar()
-        self.manhattan_dictionary = Puzzle.create_manhattan_dictionary()
+        Puzzle.manhattan_dictionary = Puzzle.create_manhattan_dictionary()
 
         # Check for solvability.
-        # if not is_solvable():
-        #     return "UNSOLVABLE"
-        # Check for exit conditions.
-        stop = 0
-        while (len(self.frontier) != 0 ):
-            stop += 1
+        if not self.is_solvable():
+            return "UNSOLVABLE"
+
+        while Puzzle.frontier:
             # Update max frontier size.
-            if (len(self.frontier) > self.max_frontier_size):
-                self.max_frontier_size = len(self.frontier)
+            if (len(Puzzle.frontier) > Puzzle.max_frontier_size):
+                Puzzle.max_frontier_size = len(Puzzle.frontier)
+
             # Remove node from frontier - frontier contains tuple of (pathcost + heuristic, PUZZLE object)
             successor = heappop(self.frontier)
-            print "EVAL:"
-            print successor[0]
             node = successor[1]
-            node.solution.append(node.action)
 
-            print "solution ", node.solution
+            # Check that this node is not an "old" node with worse path cost.
+            if successor[0] > Puzzle.frontier_map.get(node.to_string()):
+                continue
+            else:
+                # Remove node from frontier_map and continue with the code.
+                del Puzzle.frontier_map[node.to_string()]
+
             # Goal test
             # node[1] is the state
             if self.is_goal(node.init_state):
-                print node.init_state
-                return node.solution[1:] # Remove None due to initial move
-            # Find empty tiles
-            # Generate actions & successor states
+                print "STATISTICS: NUM NODES GENERATED: ", Puzzle.num_nodes_generated
+                print "STATISTICS: MAX FRONTIER SIZE: ", Puzzle.max_frontier_size
+                print "Given start state: ", self.init_state
+                print "Make sure you reached goal state. Current state: ", node.init_state
+                return node.format_solution([])
+
+            # Add to explored.
+            Puzzle.expanded.add(node.to_string())
             node.generate_actions_and_states()
-            # Calculate eval fn and enqueue
             node.enqueue_successors()
 
         return "FAILURE"
 
+    def format_solution(self, solution):
+        parent = self.parent
+        while parent is not None:
+            print parent.to_string()
+            solution.append(parent.action)
+            parent = parent.parent
 
+        print solution[::-1][1:]
+        return solution[::-1][1:]
+
+    def is_solvable(self):
+        return self.calculate_inversions() % 2 == 0
+
+    def calculate_inversions(self):
+        flat_list = [int(i) for i in list(self.to_string())]
+        inversions = 0
+        for i in range(Puzzle.MAX_TILES):
+            for j in range(i, Puzzle.MAX_TILES):
+                if flat_list[i] > flat_list[j] and flat_list[i] != 0 and flat_list[j] != 0:
+                    inversions += 1
+
+        print inversions
+        return inversions
 
     def initialize_astar(self):
-        # Init frontier (PQ), expanded STATES, soln list.
+        # Init frontier (PQ), explored set, expanded STATES, soln list.
         Puzzle.frontier = [] # Use heappush(pq, value) to enter value.
-        self.expanded_states = []
-        self.solution = []
-        heappush(Puzzle.frontier, (self.pathcost, self)) # Gives a tuple with the 1st being path cost, 2nd self.
+        Puzzle.expanded = set() # Python set has O(1) lookup.
+        Puzzle.frontier_map = {} # {State in string rep : eval fn}
 
-    def set_puzzle_parameters(self, parent, pathcost, expanded_states, solution, manhattan, action):
+        # Add initial node to the frontier
+        heappush(Puzzle.frontier, (self.pathcost, self)) # Gives a tuple with the 1st being path cost, 2nd self.
+        # Add to frontier set
+        Puzzle.frontier_map[self.to_string()] = self.pathcost
+
+    def set_puzzle_parameters(self, parent, pathcost, action):
         self.parent = parent
         self.pathcost = pathcost
-        self.expanded_states = expanded_states
-        self.solution = solution
-        self.manhattan_dictionary = manhattan
         self.action = action
 
 
@@ -114,7 +152,7 @@ class Puzzle(object):
         for list in self.init_state:
             for value in list:
                 if value == 0:
-                    self.empty_tile_position = (i, j)
+                    self.empty_tile_position = (i, j) # Set empty tile position; no need to return (i,j)
                     return
                 else:
                     j= (j + 1) % self.SIZE
@@ -127,8 +165,6 @@ class Puzzle(object):
         self.find_empty_tile()  # Location at empty_tile_position
 
         i, j = self.empty_tile_position
-        print self.init_state
-        print i, j
         init_state_copy = deepcopy(self.init_state)
 
         # View: other tiles move towards the empty tile.
@@ -164,19 +200,28 @@ class Puzzle(object):
         return state
 
     def enqueue_successors(self):
-
         for action in self.actions:
 
             # Action is (move name, state matrix)
             successor = Puzzle(action[1], self.goal_state)
             successor_pathcost = self.pathcost + 1
+            successor_eval = successor_pathcost + successor.calculate_manhattan()
+            successor.set_puzzle_parameters(self, successor_pathcost, action[0])
 
-            successor.set_puzzle_parameters(self, successor_pathcost, self.expanded_states,
-                                            self.solution, self.manhattan_dictionary, action[0])
+            # Check that action state is not in explored. If not in explored, check if in frontier
 
-            print action
-            print "eval ", successor_pathcost + successor.calculate_manhattan()
-            heappush(Puzzle.frontier, (successor_pathcost + successor.calculate_manhattan(), successor))
+            if successor.to_string() not in Puzzle.expanded:
+                state_current_cost = Puzzle.frontier_map.get(successor.to_string())
+                # If not in frontier too, add to frontier.
+                # else if in frontier AND f(n) in frontier is higher, replace that node with this successor.
+                if state_current_cost is None:
+                    heappush(Puzzle.frontier, (successor_eval, successor))
+                    Puzzle.frontier_map[successor.to_string()] = successor_eval
+                else: # State is not in expanded, is in frontier
+                    if state_current_cost > successor_eval:
+                        # Update frontier map, add successor to queue
+                        heappush(Puzzle.frontier, (successor_eval, successor))
+                        Puzzle.frontier_map[successor.to_string()] = successor_eval
 
     @staticmethod
     def create_manhattan_dictionary():
@@ -199,65 +244,17 @@ class Puzzle(object):
                 value = self.init_state[i][j]
                 if value == 0:
                     continue
-                actual_position = self.manhattan_dictionary.get(value)
+                actual_position = Puzzle.manhattan_dictionary.get(value)
                 total += abs(i - actual_position[0]) + abs(j - actual_position[1])
         return total
 
 
     def is_goal(self, state):
         return state == self.goal_state
-        # ********************************#
-        #                +---+---+---+   #
-        #                | 1 | 2 | 3 |   #
-        #                +---+---+---+   #
-        #   GOAL STATE:  | 4 | 5 | 6 |   #
-        #                +---+---+---+   #
-        #                | 7 | 8 |   |   #
-        #                +---+---+---+   #
-        # ********************************#
-
-
-# Java...
-# /**
-# 	 * Returns the number of inversions within a given puzzle.
-# 	 *
-# 	 * @param puzzle puzzle to returns the number of inversions for
-# 	 *
-# 	 * @return the number of inversions in that puzzle
-# 	 */
-# 	private static int getNumInversions(byte[] puzzle) {
-# 		int inversions = 0;
-# 		for (int i = 0; i < puzzle.length; i++) {
-# 			if (puzzle[i] == 0) {
-# 				continue;
-# 			}
-#
-# 			for (int j = i; j < puzzle.length; j++) {
-# 				if (puzzle[j] == 0) {
-# 					continue;
-# 				}
-#
-# 				if (puzzle[j] < puzzle[i]) {
-# 					inversions++;
-# 				}
-# 			}
-# 		}
-#
-# 		return inversions;
-# 	}
-#
-# 	/**
-# 	 * Returns whether or not a given puzzle is solvable.
-# 	 *
-# 	 * @param puzzle the puzzle to check
-# 	 *
-# 	 * @return {@code true} if the puzzle is solvable, otherwise {@code false}
-# 	 */
-# 	private static boolean isSolvable(byte[] puzzle) {
-# 		return (getNumInversions(puzzle)&1) == 0;
-# 	}
-#
-# # End  java.
+        # GOAL STATE:
+        # 123
+        # 456
+        # 780
 
 if __name__ == "__main__":
     # do NOT modify below
