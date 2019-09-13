@@ -11,8 +11,9 @@ import sys
 from copy import deepcopy
 from heapq import heappush, heappop
 
-# Puzzle object implementing A* using manhattan distance as a heuristic.
+
 class Puzzle(object):
+    # Puzzle object implementing A* using manhattan distance as a heuristic.
     num_nodes_generated = 0
     max_frontier_size = 1
     expanded = None
@@ -37,7 +38,7 @@ class Puzzle(object):
         # Statistics
         Puzzle.num_nodes_generated += 1
 
-    #Override
+    # Override
     def __eq__(self, other):
         # Defines equality of two Puzzle objects.
         # Defined as equal if init_state is the same.
@@ -71,6 +72,7 @@ class Puzzle(object):
 
         # Check for solvability.
         if not self.is_solvable():
+            print "UNSOLVABLE"
             return "UNSOLVABLE"
 
         while Puzzle.frontier:
@@ -105,6 +107,7 @@ class Puzzle(object):
 
         return "FAILURE"
 
+    # Returns the optimal path to the goal node by using the parent references.
     def format_solution(self, solution):
         parent = self.parent
         while parent is not None:
@@ -126,18 +129,16 @@ class Puzzle(object):
                 if flat_list[i] > flat_list[j] and flat_list[i] != 0 and flat_list[j] != 0:
                     inversions += 1
 
-        print inversions
         return inversions
 
     def initialize_astar(self):
-        # Init frontier (PQ), explored set, expanded STATES, soln list.
+        # Init frontier (PQ), explored set, frontier dict, expanded STATES, soln list.
         Puzzle.frontier = [] # Use heappush(pq, value) to enter value.
         Puzzle.expanded = set() # Python set has O(1) lookup.
         Puzzle.frontier_map = {} # {State in string rep : eval fn}
 
         # Add initial node to the frontier
         heappush(Puzzle.frontier, (self.pathcost, self)) # Gives a tuple with the 1st being path cost, 2nd self.
-        # Add to frontier set
         Puzzle.frontier_map[self.to_string()] = self.pathcost
 
     def set_puzzle_parameters(self, parent, pathcost, action):
@@ -167,24 +168,23 @@ class Puzzle(object):
         i, j = self.empty_tile_position
         init_state_copy = deepcopy(self.init_state)
 
-        # View: other tiles move towards the empty tile.
-        move_up = i + 1 # J unchanged
+        # IMPT NOTE -> Perspective: other tiles move towards the empty tile.
+        move_up = i + 1 # j unchanged
         move_down = i - 1
         move_right = j - 1 # i unchanged
         move_left = j + 1
 
         if i > 0:
             self.actions.append(("DOWN", self.vertical_slide(init_state_copy, i, move_down, j)))
-            #self.vertical_slide(init_state_copy, i, move_down, j) # Return to init state
         if i < self.SIZE - 1:
             self.actions.append(("UP", self.vertical_slide(init_state_copy, i, move_up, j)))
-            #self.vertical_slide(init_state_copy, i, move_up, j)  # Return to init state
         if j < self.SIZE - 1:
             self.actions.append(("LEFT", self.horizontal_slide(init_state_copy, j, move_left, i)))
-            #self.horizontal_slide(init_state_copy, j, move_left, i)
         if j > 0:
             self.actions.append(('RIGHT', self.horizontal_slide(init_state_copy, j, move_right, i)))
 
+    # Swaps the values of two tiles vertically.
+    # Makes a deepcopy to avoid mutation issues and having to swap back. There's probably a better way to do this.
     def vertical_slide(self, orig_state, original_i, new_i, j):
         state = deepcopy(orig_state)
         temp = state[original_i][j]
@@ -201,15 +201,13 @@ class Puzzle(object):
 
     def enqueue_successors(self):
         for action in self.actions:
-
-            # Action is (move name, state matrix)
+            # Action is a tuple: (move name, state matrix)
             successor = Puzzle(action[1], self.goal_state)
             successor_pathcost = self.pathcost + 1
             successor_eval = successor_pathcost + successor.calculate_manhattan()
             successor.set_puzzle_parameters(self, successor_pathcost, action[0])
 
             # Check that action state is not in explored. If not in explored, check if in frontier
-
             if successor.to_string() not in Puzzle.expanded:
                 state_current_cost = Puzzle.frontier_map.get(successor.to_string())
                 # If not in frontier too, add to frontier.
