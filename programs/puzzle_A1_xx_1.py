@@ -73,7 +73,7 @@ class Puzzle(object):
         # Check for solvability.
         if not self.is_solvable():
             print "UNSOLVABLE"
-            return "UNSOLVABLE"
+            return ["UNSOLVABLE"]
 
         while Puzzle.frontier:
             # Update max frontier size.
@@ -105,11 +105,12 @@ class Puzzle(object):
             node.generate_actions_and_states()
             node.enqueue_successors()
 
-        return "FAILURE"
+        return ["FAILURE"]
 
     # Returns the optimal path to the goal node by using the parent references.
     def format_solution(self, solution):
         parent = self.parent
+        solution.append(self.action)
         while parent is not None:
             print parent.to_string()
             solution.append(parent.action)
